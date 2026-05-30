@@ -4,8 +4,8 @@
 #include <WiFi.h>
 #include "esp_http_server.h"
 
-const char* ssid = "Ufanet_5";
-const char* password = "1234qwer!";
+const char* ssid = "12345678";
+const char* password = "12345678";
 
 // (пины те же, как у тебя уже есть)
 #define PWDN_GPIO_NUM     32

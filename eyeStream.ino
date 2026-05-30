@@ -3,8 +3,8 @@
 #include "esp_http_server.h"
 
 // ================= WIFI =================
-const char* ssid = "Ufanet_5";
-const char* password = "1234qwer!";
+const char* ssid = "12345678";
+const char* password = "12345678";
 
 // ================= CAMERA PINS (AI THINKER) =================
 #define PWDN_GPIO_NUM     32
@@ -35,22 +35,30 @@ static esp_err_t stream_handler(httpd_req_t *req)
     camera_fb_t *fb = NULL;
     esp_err_t res = ESP_OK;
 
-    res = httpd_resp_set_type(
-        req,
-        "multipart/x-mixed-replace; boundary=frame"
-    );
+    // Разрешаем долгоживущее соединение
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "X-Framerate", "20");
 
+    res = httpd_resp_set_type(req, "multipart/x-mixed-replace; boundary=frame");
     if (res != ESP_OK) return res;
 
     while (true)
     {
         fb = esp_camera_fb_get();
         if (!fb) {
-            Serial.println("Frame capture failed");
+            Serial.println("Frame capture failed, skipping...");
+            vTaskDelay(pdMS_TO_TICKS(100)); // ждём пока буфер освободится
             continue;
         }
 
-        char header[64];
+        // Проверяем что кадр валидный
+        if (fb->len == 0) {
+            esp_camera_fb_return(fb);
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
+
+        char header[128];
         int hlen = snprintf(header, sizeof(header),
             "--frame\r\n"
             "Content-Type: image/jpeg\r\n"
@@ -64,14 +72,14 @@ static esp_err_t stream_handler(httpd_req_t *req)
         if (res == ESP_OK)
             res = httpd_resp_send_chunk(req, "\r\n", 2);
 
-        esp_camera_fb_return(fb);
+        esp_camera_fb_return(fb); // ВСЕГДА возвращаем буфер
 
         if (res != ESP_OK) {
-            Serial.println("Client disconnected");
+            Serial.println("Send failed, client disconnected");
             break;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(50)); // ~20 FPS
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 
     return res;
@@ -169,7 +177,7 @@ void setup()
     }
 
     sensor_t *s = esp_camera_sensor_get();
-    s->set_vflip(s, 0);
+    s->set_vflip(s, 1);
     s->set_hmirror(s, 0);
 
     // -------- WIFI --------
@@ -196,5 +204,6 @@ void setup()
 // ================= LOOP =================
 void loop()
 {
-    delay(10000);
+    Serial.printf("WiFi RSSI: %d dBm\n", WiFi.RSSI());
+    delay(3000);
 }
